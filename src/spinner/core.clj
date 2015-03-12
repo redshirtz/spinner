@@ -52,7 +52,7 @@
     result
     (apply str (map #(if (string? %) % (%)) result))))
 
-(defn- fn-expl [fn] (re-matches #"(.+?)(?:\.([^.]*$))?" (.getName fn)))
+(defn- fn-expl [fn] (re-matches #"(.+?)(?:\.([^.]*$))?" (str fn)))
 (defn- extension [fn]
   (last (fn-expl fn)))
 
@@ -74,12 +74,13 @@
   (let [[spin s-keys] (first values)
         spin-fn       (intern spinner-ns (symbol spin))
         spin-dynamic  (intern spinner-ns (symbol (str "*" spin "*")) nil)]
-        (.setDynamic spin-dynamic true)
-        (doseq [[kolom-naam kolom-values] (rest values)]
-          (intern spinner-ns (symbol (str spin "->" kolom-naam))
-          (let [kolom-values (zipmap s-keys (map compile-str kolom-values))]
-            #(apply-str (kolom-values (or (var-get spin-dynamic) (spin-fn)))))))
-      (keyword->fnc spinner-name s-keys fnc)))
+    (.setDynamic ^clojure.lang.Var spin-dynamic true)
+    (alter-meta! spin-dynamic assoc :dynamic true)
+    (doseq [[kolom-naam kolom-values] (rest values)]
+      (intern spinner-ns (symbol (str spin "->" kolom-naam))
+      (let [kolom-values (zipmap s-keys (map compile-str kolom-values))]
+        #(apply-str (kolom-values (or (var-get spin-dynamic) (spin-fn)))))))
+    (keyword->fnc spinner-name s-keys fnc)))
 
 ; File
 (defmulti from-file (fn [spinner-name file fnc]
@@ -197,4 +198,4 @@
                       (fn [sym ^File file] (defspin* sym file fnc)))))))
 
 (defn eval-spin [spinstr]
-  (-> spinstr compile-str apply-str))s
+  (-> spinstr compile-str apply-str))
