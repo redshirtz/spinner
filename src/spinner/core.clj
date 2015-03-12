@@ -65,8 +65,9 @@
 
 ; Vector
 (defmethod keyword->fnc clojure.lang.PersistentVector [spinner-name values fnc]
-  (let [values (mapv compile-str values)]
-    #(apply-str (fnc values))))
+  (let [values         (mapv compile-str values)
+        spinner-values (intern spinner-ns (symbol (str spinner-name "*")) values)]
+    #(apply-str (fnc (var-get spinner-values)))))
 
 ; Map
 (defmethod keyword->fnc clojure.lang.PersistentArrayMap [spinner-name values fnc]
@@ -167,4 +168,4 @@
               (spindir (symbol (str spinner-ns "." (.getName %))) % fnc))))))))
 
 (defn eval-spin [spinstr]
-  (-> spinstr compile-str apply-str))
+  (-> spinstr compile-str apply-str))s
