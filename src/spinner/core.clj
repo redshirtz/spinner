@@ -6,22 +6,25 @@
 (def spinners (atom {}))
 (def ^:dynamic spinner-ns nil)
 
-(def percent-regex #"\"|\\%|(?<!\\)%[^%\s]+%")
 
-(defn percent-clojurizer [match]
+(def hash-regex #"\"|\\#|\\|(?<!\\)#[^#\s]+#")
+
+(defn hash-clojurizer [match]
   (cond
     (= match "\"")
     "\\\""
-    (= match "\\%")
-    "%"
+    (= match "\\")
+    "\\\\"
+    (= match "\\#")
+    "#"
 
-    (= \% (first match))
+    (= \# (first match))
     (str "\" " (subs match 1 (dec (count match))) "\"") ; TODO: Allow to be namespace independent
 
     :else match))
 
 (defn parse-str [string]
-  (str "[\"" (clojure.string/replace string percent-regex percent-clojurizer) "\"]"))
+  (str "[\"" (clojure.string/replace string hash-regex hash-clojurizer) "\"]"))
 
 (defn- resolve-symbolé [s]
   (if (string? s)
@@ -30,7 +33,8 @@
     (for [% s]
       (if (string? %) %
       ;else
-        (if-let [fn (resolve %)] (fn) (throw (IllegalArgumentException. (str "Var not found: %" % "%"))))))))
+        (if-let [fn (resolve %)] fn
+          (throw (IllegalArgumentException. (str "Var not found: #" % "#"))))))))
 
 (defn compile-str [string]
   (let [[head & tail :as parsed]
@@ -42,7 +46,7 @@
     ;else
       (resolve-symbolé parsed))))
 
-(defn- apply-str [result]
+(defn apply-str [result]
   (if (string? result)
     result
     (apply str (map #(if (string? %) % (%)) result))))
@@ -148,6 +152,7 @@
     (defspin* spinner-name file fnc)))
 
 (defn spindir
+  "TODO: Create all spinners before filling them, to avoid reference errors"
   ([dir] (spindir dir rand-nth))
   ([dir-or-name dir-or-fnc]
     (spin-args dir-or-name dir-or-fnc spindir))
