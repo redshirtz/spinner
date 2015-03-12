@@ -158,19 +158,43 @@
   ([spinner-name file fnc]
     (defspin* spinner-name file fnc)))
 
+(defn- walk-dir
+  [root-ns ^File dir visitor-fn]
+  (binding [spinner-ns (or root-ns spinner-ns)]
+    (apply concat
+           (for [^File file (.listFiles dir)]
+             (if (.isFile file)
+               [(visitor-fn (symbol (basename (.getName file))) file)]
+             ;else
+               (let [subsym (symbol (str spinner-ns "." (.getName file)))
+                     subdir (walk-dir subsym file visitor-fn)]
+                 ;; Create aliases for all sub-directories
+                 (doseq [[spinvar _] subdir]
+                   (binding [*ns* (or (find-ns spinner-ns) (create-ns spinner-ns))]
+                     (let [sym (symbol (subs (name (.. ^clojure.lang.Var spinvar ns name))
+                                             (inc (count (name spinner-ns)))))]
+                       (when-not (.lookupAlias *ns* sym)
+                         (alias sym (.. ^clojure.lang.Var spinvar ns name))))))
+                 subdir))))))
+
 (defn spindir
-  "TODO: Create all spinners before filling them, to avoid reference errors"
+  "Recursively create spinners for all the files in the given directory
+   Sub-directories will create sub-namespaces."
   ([dir] (spindir dir rand-nth))
   ([dir-or-name dir-or-fnc]
     (spin-args dir-or-name dir-or-fnc spindir))
   ([root-ns dir fnc]
-    (when (.isDirectory dir)
-      (binding [spinner-ns (or root-ns spinner-ns)]
-        (into (array-map)
-          (for [% (seq (.listFiles dir))]
-            (if (.isFile %)
-              (spinfile (symbol (basename %)) % fnc)
-              (spindir (symbol (str spinner-ns "." (.getName %))) % fnc))))))))
+    (let [^File dir (io/as-file dir)]
+      (assert (.isDirectory dir) (str dir " is not a directory."))
+      ;; 1st pass:
+      ;;  Declare vars and create namespace aliases
+      (dorun (walk-dir root-ns dir
+                       (fn [sym ^File file] (defspin* sym nil nil))))
+      ;; 2nd pass:
+      ;;  Process the files and define the actual Vars
+      (into (array-map)
+            (walk-dir root-ns dir
+                      (fn [sym ^File file] (defspin* sym file fnc)))))))
 
 (defn eval-spin [spinstr]
   (-> spinstr compile-str apply-str))s
