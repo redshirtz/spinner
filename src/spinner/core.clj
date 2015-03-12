@@ -104,11 +104,13 @@
 (defmethod keyword->fnc :default [spinner-name values fnc]
   (prn "Could not handle spinner-name" spinner-name) values)
 
-; TODO
-; spinner-name kan namespace bevatten deze binden als dat zo is.
 (defn defspin* [spinner-name values fnc]
   (binding [spinner-ns
             (cond
+             (and (symbol? spinner-name) (namespace spinner-name))
+             (let [ns-sym (symbol (namespace spinner-name))]
+               (if-let [var-ns (find-ns ns-sym)] var-ns #_else (create-ns ns-sym)))
+
              (and (symbol? spinner-ns) (find-ns spinner-ns))
              (find-ns spinner-ns)
 
@@ -120,10 +122,13 @@
 
              ;else: No spinner-ns set
              :else
-             (create-ns 'spinner))]
-    (let [spin
+             (create-ns 'spinner))
+            *ns* spinner-ns]
+    (let [spinner-name
+          (if-not (namespace spinner-name) spinner-name (symbol (name spinner-name)))
+          spin
           (intern spinner-ns spinner-name
-            (if (fn? values)
+            (if (or (nil? values) (fn? values))
               values
             ;else
               (keyword->fnc spinner-name values fnc)))]
