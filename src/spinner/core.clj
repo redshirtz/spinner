@@ -7,7 +7,7 @@
 (def ^:dynamic spinner-ns nil)
 
 
-(def hash-regex #"\"|\\\{|\\|(?<!\\)\{[^}\s]+\}")
+(def hash-regex #"\"|\\\{|\\|(?<!\\)\{[^{}\s]+\}")
 
 (defn hash-clojurizer [match]
   (cond
