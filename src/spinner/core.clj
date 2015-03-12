@@ -30,11 +30,12 @@
   (if (string? s)
     s
   ;else
-    (for [% s]
-      (if (string? %) %
-      ;else
-        (if-let [fn (resolve %)] fn
-          (throw (IllegalArgumentException. (str "Var not found: #" % "#"))))))))
+    (doall
+      (for [% s]
+        (if (string? %) %
+        ;else
+          (if-let [fn (resolve %)] fn
+            (throw (IllegalArgumentException. (str "Var not found: #" % "# with namespace: " *ns* )))))))))
 
 (defn compile-str [string]
   (let [[head & tail :as parsed]
