@@ -7,7 +7,7 @@
 (def ^:dynamic spinner-ns nil)
 
 
-(def hash-regex #"\"|\\#|\\|(?<!\\)#[^#\s]+#")
+(def hash-regex #"\"|\\\{|\\|(?<!\\)\{[^}\s]+\}")
 
 (defn hash-clojurizer [match]
   (cond
@@ -15,10 +15,10 @@
     "\\\""
     (= match "\\")
     "\\\\"
-    (= match "\\#")
-    "#"
+    (= match "\\{")
+    "{"
 
-    (= \# (first match))
+    (= \{ (first match))
     (str "\" " (subs match 1 (dec (count match))) "\"") ; TODO: Allow to be namespace independent
 
     :else match))
@@ -35,7 +35,7 @@
         (if (string? %) %
         ;else
           (if-let [fn (resolve %)] fn
-            (throw (IllegalArgumentException. (str "Var not found: #" % "# with namespace: " *ns* )))))))))
+            (throw (IllegalArgumentException. (str "Var not found: {" % "} in namespace: " *ns* )))))))))
 
 (defn compile-str [string]
   (let [[head & tail :as parsed]
