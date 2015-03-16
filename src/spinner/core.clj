@@ -83,13 +83,14 @@
   (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
 
 ; File
-(defmulti from-file (fn [spinner-name file fnc]
+(defmulti from-file (fn [spinner-name file arrow-vars-only? fnc]
   (extension file)))
 
-(defmethod from-file :default [spinner-name file fnc]
+(defmethod from-file :default [spinner-name file arrow-vars-only? fnc]
   (let [content
     (with-open [csv-file (io/reader file)]
-      (let [[columns & data]  (->> (csv/parse-csv csv-file) doall)
+      (let [data              (csv/parse-csv csv-file)
+            [columns & data]  (if arrow-vars-only? (take 1 data) (doall data))
             columns           (cons (str spinner-name) (rest columns))]
         (loop [c columns i 0 result (transient (array-map))]
           (if-not (first c)
@@ -99,11 +100,12 @@
   (keyword->fnc spinner-name content fnc)))
 
 (defmethod keyword->fnc java.io.File [spinner-name values fnc]
-  (from-file spinner-name values fnc))
+  (from-file spinner-name values false fnc))
 
 ; :default
 (defmethod keyword->fnc :default [spinner-name values fnc]
   (prn "Could not handle spinner-name" spinner-name) values)
+
 
 (defn defspin* [spinner-name values fnc]
   (binding [spinner-ns
@@ -191,7 +193,10 @@
       ;; 1st pass:
       ;;  Declare vars and create namespace aliases
       (dorun (walk-dir root-ns dir
-                       (fn [sym ^File file] (defspin* sym nil nil))))
+                       (fn [sym ^File file]
+                        (let [var+file (defspin* sym nil nil)]
+                          (from-file sym file true nil)
+                          var+file))))
       ;; 2nd pass:
       ;;  Process the files and define the actual Vars
       (into (array-map)
