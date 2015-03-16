@@ -38,7 +38,10 @@
           (if-let [fn (resolve %)] fn
             (throw (IllegalArgumentException. (str "Var not found: {" % "} in namespace: " *ns* )))))))))
 
-(defn compile-str [string]
+(defn compile-str
+  "Compiles a single string into a literal string or a seq of vars + strings.
+  See also: apply-str"
+  [string]
   (let [[head & tail :as parsed]
         (->>  (parse-str string)
               (read-string)
@@ -48,7 +51,9 @@
     ;else
       (resolve-symbolé parsed))))
 
-(defn apply-str [result]
+(defn apply-str
+  "Takes a parsed and compiled string/seq and transforms it into a regular string."
+  [result]
   (if (string? result)
     result
     (apply str (map #(if (string? %) % (%)) result))))
@@ -64,23 +69,32 @@
 (defmulti keyword->fnc (fn [spinner-name values fnc]
   (type values)))
 
+(defn compile-vector
+  "Takes a seq of string and returns a vector of compiled strings usable by apply-str.
+  See also: compile-str"
+  [vector-of-string]
+  (if (-> vector-of-string meta :compiled)
+    vector-of-string
+  ;else
+    (with-meta (mapv compile-str vector-of-string) {:compiled true})))
+
 ; Vector
 (defmethod keyword->fnc clojure.lang.PersistentVector [spinner-name values fnc]
-  (let [values         (mapv compile-str values)
+  (let [values         (compile-vector values)
         spinner-values (intern spinner-ns (symbol (str spinner-name "*")) values)]
     #(apply-str (fnc (var-get spinner-values)))))
 
 ; Map
 (defmethod keyword->fnc clojure.lang.PersistentArrayMap [spinner-name values fnc]
   (let [[spin s-keys] (first values)
-        s-keys        (mapv compile-str s-keys)
+        s-keys        (compile-vector s-keys)
         spin-fn       (intern spinner-ns (symbol spin))
         spin-dynamic  (intern spinner-ns (symbol (str "*" spin "*")) nil)]
     (.setDynamic ^clojure.lang.Var spin-dynamic true)
     (alter-meta! spin-dynamic assoc :dynamic true)
     (doseq [[col-name col-vals] (rest values)]
       (intern spinner-ns (symbol (str spin "->" (str/trim col-name)))
-      (let [col-vals (zipmap s-keys (map compile-str col-vals))]
+      (let [col-vals (zipmap s-keys (compile-vector col-vals))]
         #(apply-str (col-vals (or (var-get spin-dynamic) (spin-fn)))))))
     (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
 
