@@ -162,21 +162,22 @@
 (defn- walk-dir
   [root-ns ^File dir visitor-fn]
   (binding [spinner-ns (or root-ns spinner-ns)]
-    (apply concat
-           (for [^File file (.listFiles dir)]
-             (if (.isFile file)
-               [(visitor-fn (symbol (basename (.getName file))) file)]
-             ;else
-               (let [subsym (symbol (str spinner-ns "." (.getName file)))
-                     subdir (walk-dir subsym file visitor-fn)]
-                 ;; Create aliases for all sub-directories
-                 (doseq [[spinvar _] subdir]
-                   (binding [*ns* (or (find-ns spinner-ns) (create-ns spinner-ns))]
-                     (let [sym (symbol (subs (name (.. ^clojure.lang.Var spinvar ns name))
-                                             (inc (count (name spinner-ns)))))]
-                       (when-not (.lookupAlias *ns* sym)
-                         (alias sym (.. ^clojure.lang.Var spinvar ns name))))))
-                 subdir))))))
+    (->> (for [^File file (.listFiles dir)]
+           (if (.isFile file)
+             [(visitor-fn (symbol (basename (.getName file))) file)]
+           ;else
+             (let [subsym (symbol (str spinner-ns "." (.getName file)))
+                   subdir (walk-dir subsym file visitor-fn)]
+               ;; Create aliases for all sub-directories
+               (doseq [[spinvar _] subdir]
+                 (binding [*ns* (or (find-ns spinner-ns) (create-ns spinner-ns))]
+                   (let [sym (symbol (subs (name (.. ^clojure.lang.Var spinvar ns name))
+                                           (inc (count (name spinner-ns)))))]
+                     (when-not (.lookupAlias *ns* sym)
+                       (alias sym (.. ^clojure.lang.Var spinvar ns name))))))
+               subdir)))
+       (doall)
+       (apply concat))))
 
 (defn spindir
   "Recursively create spinners for all the files in the given directory
