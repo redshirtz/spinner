@@ -106,37 +106,38 @@
 (defmethod keyword->fnc :default [spinner-name values fnc]
   (prn "Could not handle spinner-name" spinner-name) values)
 
+(defn- create-spinner-ns [spinner-name]
+  (cond
+    (and (symbol? spinner-name) (namespace spinner-name))
+    (let [ns-sym (symbol (namespace spinner-name))]
+      (if-let [var-ns (find-ns ns-sym)] var-ns #_else (create-ns ns-sym)))
+
+    (and (symbol? spinner-ns) (find-ns spinner-ns))
+    (find-ns spinner-ns)
+
+    (and (symbol? spinner-ns) (nil? (find-ns spinner-ns)))
+    (create-ns spinner-ns)
+
+    (not (nil? spinner-ns))
+    spinner-ns
+
+    :else ; No spinner-ns set, use default
+    (create-ns 'spinner)))
 
 (defn defspin* [spinner-name values fnc]
-  (binding [spinner-ns
-            (cond
-             (and (symbol? spinner-name) (namespace spinner-name))
-             (let [ns-sym (symbol (namespace spinner-name))]
-               (if-let [var-ns (find-ns ns-sym)] var-ns #_else (create-ns ns-sym)))
-
-             (and (symbol? spinner-ns) (find-ns spinner-ns))
-             (find-ns spinner-ns)
-
-             (and (symbol? spinner-ns) (nil? (find-ns spinner-ns)))
-             (create-ns spinner-ns)
-
-             (not (nil? spinner-ns))
-             spinner-ns
-
-             ;else: No spinner-ns set
-             :else
-             (create-ns 'spinner))
-            *ns* spinner-ns]
-    (let [spinner-name
-          (if-not (namespace spinner-name) spinner-name (symbol (name spinner-name)))
-          spin
+  (let [spinner-ns
+        (create-spinner-ns spinner-name)
+        spinner-name
+        (if-not (namespace spinner-name) spinner-name (symbol (name spinner-name)))
+        spin
+        (binding [spinner-ns spinner-ns *ns* spinner-ns]
           (intern spinner-ns spinner-name
             (if (or (nil? values) (fn? values))
               values
             ;else
-              (keyword->fnc spinner-name values fnc)))]
-      (swap! spinners assoc (str spinner-name) spin)
-      [spin values])))
+              (keyword->fnc spinner-name values fnc))))]
+    (swap! spinners assoc (str spinner-name) spin)
+    [spin values]))
 
 (defmacro defspin
   ([spinner-name values]
