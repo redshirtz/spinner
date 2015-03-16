@@ -6,18 +6,18 @@
 (binding [spinner-ns 'spinner]
   ; TODO
   ;  Namespace is mappenstructuur?
-  (spindir 'spinner (io/as-file "./resources") first))
-
+  (spindir 'spinner (io/as-file "./resources") rand-nth))
 
 (refer 'spinner)
-(eval-spin "%a%")
+
 
   ; File test
-  (binding [spinner/*test* "1996"]
-    (spinner/test->Price))
-  (spinner/a)
+  (binding [spinner/*testen* "1996"]
+    (repeatedly 10 #(spinner/testen)))
+
+;  (spinner/a)
   (spinner/blabla)
-  (spinner/english)
+  (spinner.en/english)
 
 ; Map test
 (defspin macho (array-map

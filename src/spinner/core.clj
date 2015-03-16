@@ -80,7 +80,7 @@
       (intern spinner-ns (symbol (str spin "->" kolom-naam))
       (let [kolom-values (zipmap s-keys (map compile-str kolom-values))]
         #(apply-str (kolom-values (or (var-get spin-dynamic) (spin-fn)))))))
-    (keyword->fnc spinner-name s-keys fnc)))
+  (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
 
 ; File
 (defmulti from-file (fn [spinner-name file fnc]
