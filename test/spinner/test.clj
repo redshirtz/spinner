@@ -2,6 +2,8 @@
   (:require [clojure.java.io   :as io])
   (:use spinner.core))
 
+(comment
+
 ;Binding test
 (binding [spinner-ns 'spinner]
   ; TODO
@@ -46,3 +48,5 @@
 (parse-str "%mom%")
 
 (@spinners "mom")
+
+);; End comment'
