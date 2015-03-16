@@ -1,5 +1,6 @@
 (ns spinner.core
   (:require [clojure.java.io   :as io]
+            [clojure.string    :as str]
             [clojure-csv.core  :as csv])
   (:import java.util.regex.Pattern java.io.File))
 
@@ -72,15 +73,16 @@
 ; Map
 (defmethod keyword->fnc clojure.lang.PersistentArrayMap [spinner-name values fnc]
   (let [[spin s-keys] (first values)
+        s-keys        (mapv compile-str s-keys)
         spin-fn       (intern spinner-ns (symbol spin))
         spin-dynamic  (intern spinner-ns (symbol (str "*" spin "*")) nil)]
     (.setDynamic ^clojure.lang.Var spin-dynamic true)
     (alter-meta! spin-dynamic assoc :dynamic true)
-    (doseq [[kolom-naam kolom-values] (rest values)]
-      (intern spinner-ns (symbol (str spin "->" kolom-naam))
-      (let [kolom-values (zipmap s-keys (map compile-str kolom-values))]
-        #(apply-str (kolom-values (or (var-get spin-dynamic) (spin-fn)))))))
-  (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
+    (doseq [[col-name col-vals] (rest values)]
+      (intern spinner-ns (symbol (str spin "->" (str/trim col-name)))
+      (let [col-vals (zipmap s-keys (map compile-str col-vals))]
+        #(apply-str (col-vals (or (var-get spin-dynamic) (spin-fn)))))))
+    (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
 
 ; File
 (defmulti from-file (fn [spinner-name file arrow-vars-only? fnc]
