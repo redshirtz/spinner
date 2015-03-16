@@ -206,3 +206,23 @@
 
 (defn eval-spin [spinstr]
   (-> spinstr compile-str apply-str))
+
+(defn re-find-ns-names
+  "Match the result of (all-ns) against the regex 're"
+  [re]
+  (->> (all-ns) (map #(re-matches re (str %))) (remove nil?)))
+
+(defn ns-publics-grouped
+  "Group all direct sub-namespaces of root-ns by name and apply transform to each.
+  Returns a map of the transform results keyed by the namespace name (string after root-ns dot).
+  'transform takes the result of (ns-publics sub-ns).
+  Example:
+    (ns-publics-grouped 'words (fn [publics] (mapv publics ['*type*])))
+    => {\"en\" [#'words.en/*type*], \"nl\" [#'words.nl/*type*]}
+  "
+  [root-ns transform]
+  (->>
+    (re-pattern (str (name root-ns) "\\.([^.]+)"))
+    (re-find-ns-names)
+    (map (fn [[ns key :as pair]] [key (transform (ns-publics (symbol ns)))]))
+    (into {})))
