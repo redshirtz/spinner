@@ -46,7 +46,7 @@
         (->>  (parse-str string)
               (read-string)
               (remove #(= "" %)))]
-    (if (and (nil? tail) (string? (first parsed)))
+    (if (and (empty? tail) (string? head))
       head
     ;else
       (resolve-symbolé parsed))))
@@ -212,6 +212,8 @@
       (dorun (walk-dir root-ns dir
                        (fn [sym ^File file]
                         (let [var+file (defspin* sym nil nil)]
+                          ;(println "Creating in " spinner-ns " spin-file var: " sym ", root = " root-ns)
+                          (binding [*ns* (find-ns spinner-ns)] (refer root-ns))
                           (from-file sym file true nil)
                           var+file))))
       ;; 2nd pass:
