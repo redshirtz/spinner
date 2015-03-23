@@ -1,5 +1,7 @@
 (ns spinner.math)
 
+(set! *unchecked-math* true)
+
 
 (defn cartesian-product-indices
   "Calculates each succesive index, to reach nth item: target-index.
