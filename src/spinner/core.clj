@@ -103,15 +103,18 @@
   (extension file)))
 
 (defmethod from-file :default [spinner-name file arrow-vars-only? fnc]
+  (println "Spinning " file)
   (let [content
     (with-open [csv-file (io/reader file)]
       (let [data              (csv/parse-csv csv-file)
             [columns & data]  (if arrow-vars-only? (take 1 data) (doall data))
             columns           (cons (str spinner-name) (rest columns))]
-        (loop [c columns i 0 result (transient (array-map))]
+        (loop [c columns i 0 result (transient [])]
           (if-not (first c)
-            (persistent! result)
-            (let [result (assoc! result (first c) (into [] (map #(nth % i) data)))]
+            (apply array-map (persistent! result))
+          ;else
+            (let [result (conj! result (first c))
+                  result (conj! result (into [] (map #(nth % i nil) data)))]
               (recur (next c) (inc i) result))))))]
   (keyword->fnc spinner-name content fnc)))
 
@@ -120,7 +123,7 @@
 
 ; :default
 (defmethod keyword->fnc :default [spinner-name values fnc]
-  (prn "Could not handle spinner-name" spinner-name) values)
+  (println "Could not handle spinner-name: '" spinner-name "' with values: " values) values)
 
 (defn- create-spinner-ns [spinner-name]
   (cond
