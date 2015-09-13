@@ -5,6 +5,7 @@
   (:import java.util.regex.Pattern java.io.File))
 
 (def spinners (atom {}))
+(def ^:dynamic *data* nil)
 (def ^:dynamic spinner-ns nil)
 
 
@@ -28,14 +29,15 @@
   (str "[\"" (clojure.string/replace string hash-regex hash-clojurizer) "\"]"))
 
 (defn- resolve-symbolé [s]
-  (if (string? s)
+  (if (or (string? s) (keyword? s))
     s
   ;else
-    (doall
+    (vec
       (for [% s]
-        (if (string? %) %
+        (if (or (string? %) (keyword? %))
+          %
         ;else
-          (if-let [fn (resolve %)] fn
+          (if-let [spin-fn (resolve %)] spin-fn
             (throw (IllegalArgumentException. (str "Var not found: {" % "} in namespace: " *ns* )))))))))
 
 (defn compile-str
@@ -51,12 +53,24 @@
     ;else
       (resolve-symbolé parsed))))
 
+(defn eval-compiled-str [%]
+  (cond (string? %) %
+        (keyword? %) (% *data*)
+        :else (%)))
+
+(defn apply-str-transform
+  "Takes a parsed and compiled string/seq and transforms it into a seq of strings."
+  [result]
+  (if (string? result)
+    result
+    (map eval-compiled-str result)))
+
 (defn apply-str
   "Takes a parsed and compiled string/seq and transforms it into a regular string."
   [result]
   (if (string? result)
     result
-    (apply str (map #(if (string? %) % (%)) result))))
+    (apply str (map eval-compiled-str result))))
 
 (defn- fn-expl [fn] (re-matches #"(.+?)(?:\.([^.]*$))?" (str fn)))
 (defn- extension [fn]
@@ -69,14 +83,48 @@
 (defmulti keyword->fnc (fn [spinner-name values fnc]
   (type values)))
 
+(declare compile-vector)
+
+(defn compile-conditional-column [vector-map key key-prefix pre input]
+  ;(prn key key-prefix pre input)
+  (case pre
+    "0"
+      `(let [v# ~input] (or (nil? v#) (= ~(Integer/parseInt pre) v#)))
+    ("1" "2" "3" "4" "5" "6" "7" "8" "9")
+      `(= ~(Integer/parseInt pre) ~input)
+    "n"
+      (if-not (get vector-map (str ":" key-prefix ":0"))
+        `(when-let [v# ~input] (or (= v# 0) (> v# 1)))
+      ;else there's a 0-th column available
+        `(some-> ~input (> 1)))
+    (read-string pre)))
+
+(defn compile-keyed-vectors-cases [values]
+  (for [[k vs] values :when (not (empty? k))
+        :let [[_ kw n] (.split (str k) ":" 3)]]
+    [ (let [r (compile-conditional-column values k kw
+                (if (-> kw first str (= "(")) (subs k 1) #_else n)
+                (list (keyword (symbol kw)) `*data*))]
+        #_(prn r) r)
+      (compile-vector vs) ]))
+
+(defn compile-expression-keyed-vectors [values]
+  `(cond ;values are: word lists, keyed by expression
+    ~@(apply concat (compile-keyed-vectors-cases values))
+    ~@(let [r (some->> (get values "") (compile-vector) (list :else))] #_(prn r) r)))
+
 (defn compile-vector
   "Takes a seq of string and returns a vector of compiled strings usable by apply-str.
   See also: compile-str"
-  [vector-of-string]
-  (if (-> vector-of-string meta :compiled)
-    vector-of-string
+  [values]
+  (if (-> values meta :compiled)
+    values
   ;else
-    (with-meta (mapv compile-str vector-of-string) {:compiled true})))
+    (if (map? values)
+      (eval (list `fn ['i]
+              (list `when-let ['v (compile-expression-keyed-vectors values)] (list 'v 'i))))
+    ;else just a word list
+      (with-meta (mapv compile-str values) {:compiled true}))))
 
 ; Vector
 (defmethod keyword->fnc clojure.lang.PersistentVector [spinner-name values fnc]
@@ -85,17 +133,36 @@
     #(apply-str (fnc (var-get spinner-values)))))
 
 ; Map
-(defmethod keyword->fnc clojure.lang.PersistentArrayMap [spinner-name values fnc]
+(defn with-key-colon-meta [[k vs]]
+  (let [[group] (.split (str k) ":" 2)]
+    (with-meta vs {:group group :key (subs k (count group))})))
+
+(defn group-by-colon [spin-columns-map]
+  ;(prn "group-by-colon" spin-columns-map)
+  (->> spin-columns-map
+    (map with-key-colon-meta)
+    (group-by #(-> % meta :group))
+    (map (fn [[k vs]]
+           [k (if-not (next vs) (first vs)
+               #_else (zipmap (map #(-> % meta :key) vs) vs))]))
+    (into {})))
+
+(defmethod keyword->fnc clojure.lang.IPersistentMap [spinner-name values fnc]
+  (assert (not (string? values)))
   (let [[spin s-keys] (first values)
         s-keys        (compile-vector s-keys)
         spin-fn       (intern spinner-ns (symbol spin))
-        spin-dynamic  (intern spinner-ns (symbol (str "*" spin "*")) nil)]
+        spin-dynamic  (intern spinner-ns (symbol (str "*" spin "*")) nil)
+        spin-indices  (zipmap s-keys (range))
+        spin-columns  (group-by-colon (into {} (rest values)))]
+    (println "Handle spinner-name: '" spinner-name "' with keys: " (keys values))
     (.setDynamic ^clojure.lang.Var spin-dynamic true)
     (alter-meta! spin-dynamic assoc :dynamic true)
-    (doseq [[col-name col-vals] (rest values)]
-      (intern spinner-ns (symbol (str spin "->" (str/trim col-name)))
-      (let [col-vals (zipmap s-keys (compile-vector col-vals))]
-        #(apply-str (col-vals (or (var-get spin-dynamic) (spin-fn)))))))
+    (doseq [[col-name col-vals] spin-columns
+            :let [col-name (str/trim col-name)] :when (not (empty? col-name))]
+      (println (intern spinner-ns (symbol (str spin "->" col-name))
+      (let [compiled-vals (compile-vector col-vals)]
+        #(apply-str (some-> (or (var-get spin-dynamic) (spin-fn)) spin-indices compiled-vals))))))
     (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
 
 ; File
@@ -184,7 +251,7 @@
 (defn- walk-dir
   [root-ns ^File dir visitor-fn]
   (binding [spinner-ns (or root-ns spinner-ns)]
-    (->> (for [^File file (.listFiles dir)]
+    (->> (for [^File file (.listFiles dir) :when (not (.isHidden file))]
            (if (.isFile file)
              [(visitor-fn (symbol (basename (.getName file))) file)]
            ;else
