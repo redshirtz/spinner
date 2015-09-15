@@ -9,9 +9,9 @@
 (def ^:dynamic spinner-ns nil)
 
 
-(def hash-regex #"\"|\\\{|\\|(?<!\\)\{[^{}\s]+\}")
+(def hash-regex #"\"|\\\{|\\|(?<!\\)\{[^{}]+\}")
 
-(defn hash-clojurizer [match]
+(defn hash-clojurizer [^String match]
   (cond
     (= match "\"")
     "\\\""
@@ -21,7 +21,9 @@
     "{"
 
     (= \{ (first match))
-    (str "\" " (subs match 1 (dec (count match))) "\"") ; TODO: Allow to be namespace independent
+    (let [expr (subs match 1 (dec (count match)))
+          expr (if (.contains match " ") (str \( expr \)) #_else expr)]
+      (str "\" " expr "\"")) ; TODO: Allow to be namespace independent
 
     :else match))
 
@@ -29,16 +31,14 @@
   (str "[\"" (clojure.string/replace string hash-regex hash-clojurizer) "\"]"))
 
 (defn- resolve-symbolé [s]
-  (if (or (string? s) (keyword? s))
-    s
-  ;else
-    (vec
-      (for [% s]
-        (if (or (string? %) (keyword? %))
-          %
-        ;else
-          (if-let [spin-fn (resolve %)] spin-fn
-            (throw (IllegalArgumentException. (str "Var not found: {" % "} in namespace: " *ns* )))))))))
+  (cond
+    (or (string? s) (keyword? s))
+      s
+    (or (list? s) (seq? s))
+      (mapv resolve-symbolé s)
+    :otherwise
+      (if-let [spin-fn (resolve s)] spin-fn
+        (throw (IllegalArgumentException. (str "Var not found: {" s "} in namespace: " *ns* ))))))
 
 (defn compile-str
   "Compiles a single string into a literal string or a seq of vars + strings.
@@ -54,8 +54,9 @@
       (resolve-symbolé parsed))))
 
 (defn eval-compiled-str [%]
-  (cond (string? %) %
+  (cond (string?  %) %
         (keyword? %) (% *data*)
+        (vector?  %) (apply (first %) (map eval-compiled-str (next %)))
         :else (%)))
 
 (defn apply-str-transform
@@ -162,7 +163,11 @@
             :let [col-name (str/trim col-name)] :when (not (empty? col-name))]
       (println (intern spinner-ns (symbol (str spin "->" col-name))
       (let [compiled-vals (compile-vector col-vals)]
-        #(apply-str (some-> (or (var-get spin-dynamic) (spin-fn)) spin-indices compiled-vals))))))
+        (fn colval
+          ([arg]
+            (apply-str (some-> arg spin-indices compiled-vals)))
+          ([]
+            (colval (or (var-get spin-dynamic) (spin-fn)))))))))
     (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
 
 ; File
