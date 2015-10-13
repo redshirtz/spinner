@@ -167,7 +167,7 @@
           ([arg]
             (apply-str (some-> arg spin-indices compiled-vals)))
           ([]
-            (colval (or (var-get spin-dynamic) (spin-fn)))))))))
+            (colval (or (var-get spin-dynamic) (fnc s-keys)))))))))
     (keyword->fnc spinner-name s-keys (fn [%] (if-let [dyn (var-get spin-dynamic)] dyn (fnc %))))))
 
 ; File
